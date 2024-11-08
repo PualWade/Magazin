@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Magazin": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "TOKEN": "7837003874:AAFEHv7a73pr2Z13fawwUFwgyis5hVWjiEY"
+      }
+    }
+  }
+}
