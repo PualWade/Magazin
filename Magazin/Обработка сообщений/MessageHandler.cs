@@ -1,18 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Telegram.Bot.Types;
-using Telegram.Bot;
 using System.IO;
+using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Types;
 
 public static class MessageHandler
 {
-    public static async Task SendExcelTemplateAsync(TelegramBotClient bot, ChatId chatId)
+    public static async Task SendExcelTemplateAsync(ITelegramBotClient botClient, long chatId)
     {
         // Путь к шаблону Excel-файла
-        string templateFilePath = Path.Combine("Templates", "Шаблон.xlsx");
+        string templateFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Templates", "Шаблон.xlsx");
 
         // Текст инструкции
         string instructionText = "Пожалуйста, заполните прилагаемый шаблон Excel-файла и отправьте его мне для импорта данных.\n\n" +
@@ -31,47 +28,51 @@ public static class MessageHandler
                                  "После заполнения отправьте файл в ответ на это сообщение.";
 
         // Отправляем инструкцию
-        await bot.SendTextMessageAsync(chatId, instructionText);
+        await botClient.SendTextMessageAsync(chatId, instructionText);
 
         // Отправляем шаблон файла
-        using (var fileStream = new FileStream(templateFilePath, FileMode.Open, FileAccess.Read))
+        if (System.IO.File.Exists(templateFilePath))
         {
-            await bot.SendDocument(
+            using var fileStream = new FileStream(templateFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await botClient.SendDocument(
                 chatId: chatId,
                 document: new InputFileStream(fileStream, "Шаблон.xlsx"),
                 caption: "Шаблон для импорта продуктов и категорий"
             );
         }
+        else
+        {
+            await botClient.SendTextMessageAsync(chatId, "Шаблон не найден.");
+        }
     }
 
-
-    public static async Task HandleReceivedDocumentAsync(TelegramBotClient bot, Message message)
+    public static async Task HandleReceivedDocumentAsync(ITelegramBotClient botClient, Message message)
     {
         var fileId = message.Document.FileId;
-        var file = await bot.GetFile(fileId);
-        var filePath = Path.Combine("Uploads", message.Document.FileName);
+        var file = await botClient.GetFile(fileId);
+        var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uploads", message.Document.FileName);
 
         // Создаем директорию Uploads, если она не существует
-        Directory.CreateDirectory("Uploads");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
         // Сохранение файла локально
         using (var saveFileStream = new FileStream(filePath, FileMode.Create))
         {
-            await bot.DownloadFile(file.FilePath, saveFileStream);
+            await botClient.DownloadFile(file.FilePath, saveFileStream);
         }
 
         try
         {
             // Импорт данных из Excel-файла
-            await DatabaseManager.ImportProductsFromExcel(filePath, bot, message);
+            await DatabaseManager.ImportProductsFromExcelAsync(filePath, botClient, message);
 
             // Отправляем сообщение об успешном импорте
-            await bot.SendTextMessageAsync(message.Chat.Id, "Данные успешно импортированы.");
+            await botClient.SendTextMessageAsync(message.Chat.Id, "Данные успешно импортированы.");
         }
         catch (Exception ex)
         {
             // Отправляем сообщение об ошибке
-            await bot.SendTextMessageAsync(message.Chat.Id, $"Произошла ошибка при импорте данных: {ex.Message}");
+            await botClient.SendTextMessageAsync(message.Chat.Id, $"Произошла ошибка при импорте данных: {ex.Message}");
         }
         finally
         {
@@ -82,6 +83,4 @@ public static class MessageHandler
             }
         }
     }
-
-
 }
