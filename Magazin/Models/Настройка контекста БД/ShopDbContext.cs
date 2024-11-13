@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Reflection.Emit;
+using Magazin.Models;
 
 public class ShopDbContext : DbContext
 {

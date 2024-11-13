@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using ClosedXML.Excel;
+using Magazin.Models;
 
 public static class DatabaseManager
 {
@@ -20,7 +21,7 @@ public static class DatabaseManager
         if (!context.Users.Any(u => u.UserId == user.Id))
         {
             // Добавляем нового пользователя
-            context.Users.Add(new User
+            context.Users.Add(new Magazin.Models.User
             {
                 UserId = user.Id,
                 FirstName = user.FirstName,
