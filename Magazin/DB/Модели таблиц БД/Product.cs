@@ -13,13 +13,13 @@ public class Product
     [Required]
     public string ProductName { get; set; }
 
-    public string Description { get; set; }
-
+    public string ?Description { get; set; }
+    
     [Required]
     public decimal Price { get; set; }
 
     [Required]
-    public string Currency { get; set; }
+    public string ?Currency { get; set; }
 
     [Required]
     public int StockQuantity { get; set; }
@@ -27,7 +27,7 @@ public class Product
     [Required]
     public int CategoryId { get; set; }
 
-    public string ImageUrl { get; set; }
+    public string ?ImageUrl { get; set; }
 
     public DateTime DateAdded { get; set; } = DateTime.UtcNow;
 

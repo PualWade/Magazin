@@ -5,9 +5,13 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using System.Collections.Generic;
 
 class Program
 {
+    // Словарь для хранения состояния пользователей
+    private static Dictionary<long, bool> userWaitingForFile = new Dictionary<long, bool>();
+
     static async Task Main(string[] args)
     {
         await RunBotAsync();
@@ -40,7 +44,15 @@ class Program
         async Task OnMessage(Message msg, UpdateType type)
         {
             if (msg.Text is not { } text)
-                Console.WriteLine($"Получено сообщение типа {msg.Type}");
+                if (msg.Document != null)
+                {
+                    await OnDocumentReceived(msg);
+                }
+                else
+                {
+                    Console.WriteLine($"Получено сообщение типа {msg.Type}");
+
+                }
             else if (text.StartsWith('/'))
             {
                 var space = text.IndexOf(' ');
@@ -75,7 +87,9 @@ class Program
 
                     break;
                 case "❓ Помощь":
-                    
+                    await MessageHandler.SendExcelTemplateAsync(bot,msg.Chat.Id);
+                    //DatabaseManager.ImportProductsFromExcel(@"C:\Users\User\Downloads\Списокк товаров на двух листах.xlsx", bot, msg);
+                    userWaitingForFile[msg.Chat.Id] = true;
                     break;
                 case "👸 Для Лизочки":
                     if (7243188298 == msg.Chat.Id)
@@ -184,6 +198,23 @@ class Program
         {
             if (pollAnswer.User != null)
                 await bot.SendMessage(pollAnswer.User.Id, $"You voted for option(s) id [{string.Join(',', pollAnswer.OptionIds)}]");
+        }
+
+        async Task OnDocumentReceived(Message msg)
+        {
+            // Проверяем, ожидает ли пользователь загрузки файла
+            if (userWaitingForFile.ContainsKey(msg.Chat.Id) && userWaitingForFile[msg.Chat.Id])
+            {
+                // Обрабатываем полученный документ
+                await MessageHandler.HandleReceivedDocumentAsync(bot, msg);
+                // Сбрасываем состояние ожидания
+                userWaitingForFile[msg.Chat.Id] = false;
+            }
+            else
+            {
+                // Пользователь отправил документ, когда бот этого не ожидал
+                await bot.SendTextMessageAsync(msg.Chat.Id, "Я не ожидаю от вас файл. Если вы хотите импортировать данные, нажмите кнопку '❓ Помощь'.");
+            }
         }
     }
 }

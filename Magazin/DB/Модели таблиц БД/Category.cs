@@ -11,7 +11,7 @@ public class Category
     [Required]
     public string CategoryName { get; set; }
 
-    public string Description { get; set; }
+    public string ?Description { get; set; }
 
     // Навигационное свойство
     public ICollection<Product> Products { get; set; }
