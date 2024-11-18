@@ -1,4 +1,6 @@
 ﻿using Magazin.Services;
+using Magazin.Helpers;
+using Magazin.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -6,19 +8,17 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
-using Magazin.Services;
 
 namespace Magazin.Handlers
 {
     public class MessageHandler
     {
         // Потокобезопасный словарь для хранения состояния пользователей
-        private static readonly ConcurrentDictionary<long, bool> userWaitingForFile = new();
+        private static readonly ConcurrentDictionary<long, UserState> userStates = new();
 
         public async Task HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
         {
-            if (message.Text != null)
+            if (message.Type == MessageType.Text)
             {
                 if (message.Text.StartsWith('/'))
                 {
@@ -29,7 +29,7 @@ namespace Magazin.Handlers
                     await HandleTextMessageAsync(botClient, message, cancellationToken);
                 }
             }
-            else if (message.Document != null)
+            else if (message.Type == MessageType.Document)
             {
                 await HandleDocumentAsync(botClient, message, cancellationToken);
             }
@@ -47,16 +47,24 @@ namespace Magazin.Handlers
             {
                 case "/start":
                     await UserService.AddUserAsync(message.From);
-                    await botClient.SendTextMessageAsync(
+
+                    var keyboard = KeyboardHelper.GetMainMenuKeyboard();
+
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: "Добро пожаловать! Используйте меню для навигации.",
-                        replyMarkup: new ReplyKeyboardRemove(),
+                        text: "Добро пожаловать! Выберите опцию из меню ниже:",
+                        replyMarkup: keyboard,
                         cancellationToken: cancellationToken
                     );
+
+                    // Устанавливаем состояние пользователя в Idle
+                    userStates[message.Chat.Id] = UserState.Idle;
                     break;
+
                 // Добавьте обработку других команд
+
                 default:
-                    await botClient.SendTextMessageAsync(
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
                         text: "Неизвестная команда.",
                         cancellationToken: cancellationToken
@@ -67,34 +75,142 @@ namespace Magazin.Handlers
 
         private async Task HandleTextMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
         {
-            switch (message.Text)
+            // Получаем текущее состояние пользователя или устанавливаем по умолчанию Idle
+            var state = userStates.GetOrAdd(message.Chat.Id, UserState.Idle);
+
+            if (state == UserState.WaitingForFile)
             {
-                case "❓ Помощь":
-                    await ExcelService.SendExcelTemplateAsync(botClient, message.Chat.Id);
-                    userWaitingForFile[message.Chat.Id] = true;
-                    break;
-                // Добавьте обработку других сообщений
-                default:
-                    await botClient.SendTextMessageAsync(
+                if (message.Text.Equals("Отмена", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Пользователь отменил операцию
+                    userStates[message.Chat.Id] = UserState.Idle;
+
+                    var keyboard = KeyboardHelper.GetMainMenuKeyboard();
+
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: "Команда не распознана.",
-                        parseMode: ParseMode.Html,
+                        text: "Операция отменена.",
+                        replyMarkup: keyboard,
                         cancellationToken: cancellationToken
                     );
-                    break;
+                }
+                else
+                {
+                    // Игнорируем другие сообщения
+                    await botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "Пожалуйста, отправьте файл или нажмите 'Отмена'.",
+                        cancellationToken: cancellationToken
+                    );
+                }
+            }
+            else
+            {
+                switch (message.Text)
+                {
+                    case "🍴 Меню":
+                        // Обработка команды "Меню"
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Здесь будет показано меню продуктов.",
+                            cancellationToken: cancellationToken
+                        );
+                        break;
+
+                    case "📦 Заказы":
+                        // Обработка команды "Заказы"
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Здесь будут отображаться ваши заказы.",
+                            cancellationToken: cancellationToken
+                        );
+                        break;
+
+                    case "🛍 Корзина":
+                        // Обработка команды "Корзина"
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Ваша корзина пуста.",
+                            cancellationToken: cancellationToken
+                        );
+                        break;
+
+                    case "⚙️ Настройки":
+                        // Обработка команды "Настройки"
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Здесь вы можете изменить настройки.",
+                            cancellationToken: cancellationToken
+                        );
+                        break;
+
+                    case "❓ Помощь":
+                        // Переводим пользователя в состояние ожидания файла
+                        userStates[message.Chat.Id] = UserState.WaitingForFile;
+
+                        var cancelKeyboard = KeyboardHelper.GetCancelKeyboard();
+
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Пожалуйста, заполните прилагаемый шаблон Excel-файла и отправьте его мне для импорта данных.\n\n" +
+                                  "После заполнения отправьте файл или нажмите 'Отмена' для выхода.",
+                            replyMarkup: cancelKeyboard,
+                            cancellationToken: cancellationToken
+                        );
+
+                        // Отправляем шаблон файла
+                        await ExcelService.SendExcelTemplateAsync(botClient, message.Chat.Id);
+                        break;
+
+                    // Добавьте обработку других сообщений
+
+                    default:
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Команда не распознана. Пожалуйста, выберите опцию из меню.",
+                            cancellationToken: cancellationToken
+                        );
+                        break;
+                }
             }
         }
 
         private async Task HandleDocumentAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
         {
-            if (userWaitingForFile.TryGetValue(message.Chat.Id, out bool isWaiting) && isWaiting)
+            // Получаем текущее состояние пользователя или устанавливаем по умолчанию Idle
+            var state = userStates.GetOrAdd(message.Chat.Id, UserState.Idle);
+
+            if (state == UserState.WaitingForFile)
             {
-                await ExcelService.HandleReceivedDocumentAsync(botClient, message);
-                userWaitingForFile[message.Chat.Id] = false;
+                try
+                {
+                    // Обрабатываем полученный файл
+                    await ExcelService.HandleReceivedDocumentAsync(botClient, message);
+
+                    // Устанавливаем состояние пользователя в Idle
+                    userStates[message.Chat.Id] = UserState.Idle;
+
+                    var keyboard = KeyboardHelper.GetMainMenuKeyboard();
+
+                    await botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "Данные успешно импортированы.",
+                        replyMarkup: keyboard,
+                        cancellationToken: cancellationToken
+                    );
+                }
+                catch (Exception ex)
+                {
+                    await botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"Произошла ошибка при импорте данных: {ex.Message}",
+                        cancellationToken: cancellationToken
+                    );
+                }
             }
             else
             {
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: message.Chat.Id,
                     text: "Я не ожидаю от вас файл. Пожалуйста, нажмите кнопку '❓ Помощь', чтобы получить инструкцию.",
                     cancellationToken: cancellationToken

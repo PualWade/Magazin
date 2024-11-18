@@ -78,12 +78,12 @@ public static class DatabaseManager
             // Фиксируем транзакцию
             await transaction.CommitAsync();
 
-            await botClient.SendTextMessageAsync(msg.Chat.Id, "Данные успешно синхронизированы.");
+            await botClient.SendMessage(msg.Chat.Id, "Данные успешно синхронизированы.");
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            await botClient.SendTextMessageAsync(msg.Chat.Id, $"Ошибка при импорте данных: {ex.Message}");
+            await botClient.SendMessage(msg.Chat.Id, $"Ошибка при импорте данных: {ex.Message}");
             Console.WriteLine(ex.Message.ToString());
         }
     }
