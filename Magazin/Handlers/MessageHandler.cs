@@ -80,7 +80,7 @@ namespace Magazin.Handlers
 
             if (state == UserState.WaitingForFile)
             {
-                if (message.Text.Equals("Отмена", StringComparison.OrdinalIgnoreCase))
+                if (message.Text.Equals("🚫 Отмена", StringComparison.OrdinalIgnoreCase))
                 {
                     // Пользователь отменил операцию
                     userStates[message.Chat.Id] = UserState.Idle;
@@ -99,7 +99,7 @@ namespace Magazin.Handlers
                     // Игнорируем другие сообщения
                     await botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: "Пожалуйста, отправьте файл или нажмите 'Отмена'.",
+                        text: "Пожалуйста, отправьте файл или нажмите '🚫 Отмена'.",
                         cancellationToken: cancellationToken
                     );
                 }
@@ -108,13 +108,8 @@ namespace Magazin.Handlers
             {
                 switch (message.Text)
                 {
-                    case "🍴 Меню":
-                        // Обработка команды "Меню"
-                        await botClient.SendMessage(
-                            chatId: message.Chat.Id,
-                            text: "Здесь будет показано меню продуктов.",
-                            cancellationToken: cancellationToken
-                        );
+                    case "🍴 Каталог":
+                        await HandleCatalogAsync(botClient, message, cancellationToken);
                         break;
 
                     case "📦 Заказы":
@@ -152,15 +147,16 @@ namespace Magazin.Handlers
 
                         await botClient.SendMessage(
                             chatId: message.Chat.Id,
-                            text: "Пожалуйста, заполните прилагаемый шаблон Excel-файла и отправьте его мне для импорта данных.\n\n" +
-                                  "После заполнения отправьте файл или нажмите 'Отмена' для выхода.",
+                            text: "Пожалуйста, заполните прилагаемые шаблоны Excel или CSV-файла и отправьте один из них мне для импорта данных.\n\n" +
+                                  "После заполнения отправьте файл или нажмите '🚫 Отмена' для выхода.",
                             replyMarkup: cancelKeyboard,
                             cancellationToken: cancellationToken
                         );
 
-                        // Отправляем шаблон файла
-                        await ExcelService.SendExcelTemplateAsync(botClient, message.Chat.Id);
+                        // Отправляем шаблоны файлов
+                        await DocumentService.SendTemplateFilesAsync(botClient, message.Chat.Id);
                         break;
+
 
                     // Добавьте обработку других сообщений
 
@@ -175,6 +171,40 @@ namespace Magazin.Handlers
             }
         }
 
+
+
+
+        private async Task HandleCatalogAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+        {
+            // Получаем список активных категорий
+            var categories = await CategoryService.GetActiveCategoriesAsync();
+
+            if (categories == null || categories.Count == 0)
+            {
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "Категории не найдены.",
+                    cancellationToken: cancellationToken
+                );
+                return;
+            }
+
+            // Создаем инлайн-клавиатуру с категориями
+            var inlineKeyboard = KeyboardHelper.GetCategoriesInlineKeyboard(categories);
+
+            await botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "Пожалуйста, выберите категорию:",
+                replyMarkup: inlineKeyboard,
+                cancellationToken: cancellationToken
+            );
+        }
+
+
+
+
+
+
         private async Task HandleDocumentAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
         {
             // Получаем текущее состояние пользователя или устанавливаем по умолчанию Idle
@@ -182,28 +212,70 @@ namespace Magazin.Handlers
 
             if (state == UserState.WaitingForFile)
             {
-                try
+                string fileExtension = Path.GetExtension(message.Document.FileName).ToLowerInvariant();
+
+                if (fileExtension == ".xlsx" || fileExtension == ".xls")
                 {
-                    // Обрабатываем полученный файл
-                    await ExcelService.HandleReceivedDocumentAsync(botClient, message);
+                    // Обработка Excel-файла
+                    try
+                    {
+                        await DocumentService.HandleReceivedExcelAsync(botClient, message);
 
-                    // Устанавливаем состояние пользователя в Idle
-                    userStates[message.Chat.Id] = UserState.Idle;
+                        // Устанавливаем состояние пользователя в Idle
+                        userStates[message.Chat.Id] = UserState.Idle;
 
-                    var keyboard = KeyboardHelper.GetMainMenuKeyboard();
+                        var keyboard = KeyboardHelper.GetMainMenuKeyboard();
 
-                    await botClient.SendMessage(
-                        chatId: message.Chat.Id,
-                        text: "Данные успешно импортированы.",
-                        replyMarkup: keyboard,
-                        cancellationToken: cancellationToken
-                    );
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Данные из Excel-файла успешно импортированы.",
+                            replyMarkup: keyboard,
+                            cancellationToken: cancellationToken
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: $"Произошла ошибка при импорте данных из Excel-файла: {ex.Message}",
+                            cancellationToken: cancellationToken
+                        );
+                    }
                 }
-                catch (Exception ex)
+                else if (fileExtension == ".csv")
                 {
+                    // Обработка CSV-файла
+                    try
+                    {
+                        await DocumentService.HandleReceivedCsvAsync(botClient, message);
+
+                        // Устанавливаем состояние пользователя в Idle
+                        userStates[message.Chat.Id] = UserState.Idle;
+
+                        var keyboard = KeyboardHelper.GetMainMenuKeyboard();
+
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "Данные из CSV-файла успешно импортированы.",
+                            replyMarkup: keyboard,
+                            cancellationToken: cancellationToken
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: $"Произошла ошибка при импорте данных из CSV-файла: {ex.Message}",
+                            cancellationToken: cancellationToken
+                        );
+                    }
+                }
+                else
+                {
+                    // Неподдерживаемый формат файла
                     await botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: $"Произошла ошибка при импорте данных: {ex.Message}",
+                        text: "Пожалуйста, отправьте файл в формате Excel (.xlsx) или CSV (.csv).",
                         cancellationToken: cancellationToken
                     );
                 }

@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using ClosedXML.Excel;
 using Magazin.Models;
 
 namespace Magazin.Helpers
 {
-    public static class ExcelParser
+    public static class DocumentParser
     {
-        public static List<Category> GetCategoriesFromSheet(IXLWorksheet worksheet)
+        public static List<Category> GetCategoriesFromExcelSheet(IXLWorksheet worksheet)
         {
             var categories = new List<Category>();
             var categoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -31,7 +32,7 @@ namespace Magazin.Helpers
             return categories;
         }
 
-        public static List<Product> GetProductsFromSheet(IXLWorksheet worksheet, Dictionary<string, int> categoryDict)
+        public static List<Product> GetProductsFromExcelSheet(IXLWorksheet worksheet, Dictionary<string, int> categoryDict)
         {
             var products = new List<Product>();
             var productNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

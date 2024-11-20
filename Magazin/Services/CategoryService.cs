@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Magazin.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Magazin.Services
 {
@@ -37,6 +38,15 @@ namespace Magazin.Services
             }
 
             await context.SaveChangesAsync();
+        }
+
+        public static async Task<List<Category>> GetActiveCategoriesAsync()
+        {
+            using var context = new ShopDbContext();
+            var categories = await context.Categories
+                .OrderBy(c => c.CategoryName)
+                .ToListAsync();
+            return categories;
         }
 
         // Добавьте другие методы для управления категориями
